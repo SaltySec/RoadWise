@@ -72,9 +72,16 @@ button { touch-action:manipulation; }
 #side-panel > * { pointer-events:auto; }
 #mobile-toggle {
   display:none;
-  position:fixed; left:50%; bottom:max(14px,env(safe-area-inset-bottom)); transform:translateX(-50%);
+  position:fixed; left:50%; bottom:max(16px,env(safe-area-inset-bottom)); transform:translateX(-50%);
   z-index:30;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
+#mobile-toggle.hidden-btn {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) scale(0.85);
+}
+
 #mobile-sheet { display:none; }
 #loading-overlay { z-index:100; }
 
@@ -96,17 +103,21 @@ button { touch-action:manipulation; }
   #side-panel { display:none; }
   #mobile-toggle { display:flex; }
   #mobile-sheet {
-    position:fixed; left:0; right:0; bottom:0; z-index:25;
+    position:fixed; left:0; right:0; bottom:0; z-index:40;
     display:flex; flex-direction:column; gap:9px;
-    max-height:min(72vh,600px);
-    padding:10px 12px calc(12px + env(safe-area-inset-bottom));
-    border-radius:18px 18px 0 0;
-    transform:translateY(calc(100% - 58px));
-    transition:transform .25s ease;
+    max-height:min(75vh,600px);
+    padding:12px 14px calc(14px + env(safe-area-inset-bottom));
+    border-radius:20px 20px 0 0;
+    transform:translateY(100%);
+    transition:transform .28s cubic-bezier(0.16, 1, 0.3, 1);
   }
   #mobile-sheet.open { transform:translateY(0); }
+  #mobile-sheet .sheet-handle-area {
+    padding: 4px 0 8px;
+    cursor: pointer;
+  }
   #mobile-sheet .sheet-handle {
-    width:42px;height:4px;border-radius:99px;background:#64748b;margin:0 auto 2px;
+    width:42px;height:4px;border-radius:99px;background:#64748b;margin:0 auto;
   }
 }
 </style>
@@ -175,12 +186,17 @@ button { touch-action:manipulation; }
 
 <!-- Mobile Drawer -->
 <div id="mobile-sheet" class="glass-panel">
-  <div class="sheet-handle"></div>
-  <div class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+  <div id="sheet-close-handle" class="sheet-handle-area flex items-center justify-between">
+    <div class="sheet-handle"></div>
+    <button id="close-sheet-btn" class="text-slate-400 hover:text-white text-sm font-medium flex items-center gap-1 py-1 px-2">
+      <span>Close</span> <i class="fa-solid fa-chevron-down text-xs"></i>
+    </button>
+  </div>
+  <div class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2 mb-1">
     <i class="fa-solid fa-gamepad text-blue-400"></i> Game Modes
   </div>
-  <div id="mobile-modes" class="grid gap-2"></div>
-  <div id="mobile-prompt" class="border-t border-slate-700/60 pt-3">
+  <div id="mobile-modes" class="grid gap-2 overflow-y-auto max-h-[35vh]"></div>
+  <div id="mobile-prompt" class="border-t border-slate-700/60 pt-3 mt-1">
     <span class="text-[10px] uppercase font-bold tracking-wider text-blue-400">Active Task</span>
     <div id="mobile-target-instruction" class="text-sm font-semibold text-slate-200 mt-1">Load a region to begin.</div>
     <div id="mobile-target-subtext" class="text-xs text-slate-400 mt-1">Choose a city or town above.</div>
@@ -189,8 +205,10 @@ button { touch-action:manipulation; }
     </button>
   </div>
 </div>
-<button id="mobile-toggle" class="bg-slate-900/95 border border-slate-600 text-white shadow-xl items-center gap-2 p-3 rounded-full">
-  <i class="fa-solid fa-sliders"></i><span>Game</span>
+
+<!-- Floating Open Button -->
+<button id="mobile-toggle" class="bg-slate-900/95 border border-slate-600 text-white shadow-xl items-center gap-2 px-5 py-3 rounded-full font-semibold text-sm">
+  <i class="fa-solid fa-sliders text-blue-400"></i><span>Game Modes & Tasks</span>
 </button>
 
 <!-- Street Learn Modal -->
@@ -296,6 +314,16 @@ function updateModeButtonState() {
   document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === currentMode));
 }
 
+function openMobileSheet() {
+  document.getElementById("mobile-sheet").classList.add("open");
+  document.getElementById("mobile-toggle").classList.add("hidden-btn");
+}
+
+function closeMobileSheet() {
+  document.getElementById("mobile-sheet").classList.remove("open");
+  document.getElementById("mobile-toggle").classList.remove("hidden-btn");
+}
+
 window.addEventListener("load", () => {
   map = L.map("map", { zoomControl:false, preferCanvas:true }).setView([41.8164,-87.8672], 14);
   L.control.zoom({position:"bottomright"}).addTo(map);
@@ -314,7 +342,11 @@ window.addEventListener("load", () => {
   document.getElementById("learn-input").addEventListener("keydown", e => { if (e.key === "Enter") submitLearnGuess(); });
   document.getElementById("next-round-btn").addEventListener("click", nextRound);
   document.getElementById("mobile-next-round-btn").addEventListener("click", nextRound);
-  document.getElementById("mobile-toggle").addEventListener("click", () => document.getElementById("mobile-sheet").classList.toggle("open"));
+  
+  /* Mobile Drawer Toggle Listeners */
+  document.getElementById("mobile-toggle").addEventListener("click", openMobileSheet);
+  document.getElementById("sheet-close-handle").addEventListener("click", closeMobileSheet);
+  document.getElementById("close-sheet-btn").addEventListener("click", closeMobileSheet);
 
   document.getElementById("region-input").value = "La Grange, IL";
   switchMode("learn");
@@ -393,7 +425,6 @@ async function searchRegion() {
       b = [lat - 0.015, lat + 0.015, lon - 0.018, lon + 0.018];
     }
     
-    // Explicit Overpass bounding box variables: south, west, north, east
     const s = b[0], w = b[2], n = b[1], e = b[3];
     await loadOverpassData(s, w, n, e, token);
     if (token !== regionLoadToken) return;
@@ -403,7 +434,7 @@ async function searchRegion() {
   } catch (err) {
     console.error("GeoNavigator Load Error:", err);
     if (err.message !== "Cancelled") {
-      alert("Could not load this region. OpenStreetMap servers may be busy, try again in a moment.");
+      alert("Could not load this region. If running as a local file on mobile Chrome, please host on Netlify or GitHub Pages to bypass CORS restrictions.");
     }
   } finally {
     if (token === regionLoadToken) { loading = false; hideLoading(); }
@@ -413,315 +444,4 @@ async function searchRegion() {
 async function loadOverpassData(s, w, n, e, token) {
   showLoading("Loading streets & features", "Downloading OpenStreetMap roads...");
 
-  // Corrected Overpass QL with explicit bounds on every statement
-  const query = `
-[out:json][timeout:35];
-(
-  way["highway"~"^(primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|residential|unclassified)$"]["name"](${s},${w},${n},${e});
-  nwr["addr:housenumber"]["addr:street"](${s},${w},${n},${e});
-  nwr["amenity"~"^(hospital|fire_station|police|school|college|university|clinic|townhall|library)$"](${s},${w},${n},${e});
-);
-out body center;
->;
-out skel qt;`;
-
-  const data = await overpassQuery(query, token);
-  if (token !== regionLoadToken) return;
-  processOverpassData(data);
-}
-
-function processOverpassData(data) {
-  const nodes = new Map();
-  for (const el of data.elements || []) {
-    if (el.type === "node" && el.lat != null && el.lon != null) {
-      nodes.set(el.id, [el.lat, el.lon]);
-    }
-  }
-
-  activeRoadLayers.forEach(l => map.removeLayer(l));
-  activePoiMarkers.forEach(l => map.removeLayer(l));
-  activeRoadLayers = []; activePoiMarkers = [];
-  regionStreets = []; regionPois = []; regionAddresses = [];
-
-  const streetMap = new Map();
-
-  for (const el of data.elements || []) {
-    const tags = el.tags || {};
-    if (el.type === "way" && tags.name && Array.isArray(el.nodes)) {
-      const coords = el.nodes.map(id => nodes.get(id)).filter(Boolean);
-      if (coords.length >= 2) {
-        const name = tags.name.trim();
-        if (!streetMap.has(name)) streetMap.set(name, []);
-        streetMap.get(name).push(coords);
-      }
-    }
-    if (tags["addr:housenumber"] && tags["addr:street"]) {
-      let lat = el.lat || (el.center && el.center.lat);
-      let lon = el.lon || (el.center && el.center.lon);
-      if (lat != null && lon != null) {
-        regionAddresses.push({ address: `${tags["addr:housenumber"]} ${tags["addr:street"]}`, lat:+lat, lon:+lon });
-      }
-    }
-    if (tags.amenity && tags.name) {
-      let lat = el.lat || (el.center && el.center.lat);
-      let lon = el.lon || (el.center && el.center.lon);
-      if (lat != null && lon != null) {
-        regionPois.push({ name: tags.name, category: tags.amenity.replace("_"," "), lat:+lat, lon:+lon });
-      }
-    }
-  }
-
-  streetMap.forEach((segments, name) => {
-    regionStreets.push({ name, segments, answered: false, correct: false, layers: [] });
-  });
-
-  renderInteractiveStreets();
-  renderPoiMarkers();
-}
-
-function renderInteractiveStreets() {
-  for (const street of regionStreets) {
-    const layers = [];
-    for (const coords of street.segments) {
-      const line = L.polyline(coords, { color:"#64748b", weight:4, opacity:.82, lineCap:"round", lineJoin:"round" });
-      const hitbox = L.polyline(coords, { color:"#000", weight:18, opacity:0 });
-      line.addTo(map); hitbox.addTo(map);
-
-      hitbox.on("click", e => onStreetClicked(street, e));
-      line.on("click", e => onStreetClicked(street, e));
-      hitbox.on("mouseover", () => { if (!street.answered) line.setStyle({ color:"#38bdf8", weight:6 }); });
-      hitbox.on("mouseout", () => { if (!street.answered) line.setStyle({ color:"#64748b", weight:4 }); });
-
-      layers.push({ line, hitbox });
-      activeRoadLayers.push(line, hitbox);
-    }
-    street.layers = layers;
-  }
-}
-
-function renderPoiMarkers() {
-  for (const poi of regionPois) {
-    const marker = L.circleMarker([poi.lat, poi.lon], { radius:4, color:"#f59e0b", fillColor:"#f59e0b", fillOpacity:.65 }).addTo(map);
-    marker.bindTooltip(poi.name, { direction:"top" });
-    activePoiMarkers.push(marker);
-  }
-}
-
-function switchMode(mode) {
-  currentMode = mode; targetQuestion = null;
-  tempMarkersLayer.clearLayers();
-  map.off("click", onMapLocationClicked);
-  closeLearnModal();
-  updateModeButtonState();
-
-  if (!regionStreets.length) {
-    setPrompt("Search a region above to start!", "Load a city or town to generate map elements.");
-    return;
-  }
-
-  if (mode === "learn") {
-    setPrompt("Mode 1: Street Learn", "Click any highlighted street and type its name.");
-  } else if (mode === "challenge") {
-    setPrompt("Mode 2: Street Challenge", "Locate the prompted street on the map.");
-    setupNextChallengeRound();
-  } else if (mode === "address") {
-    map.on("click", onMapLocationClicked);
-    if (!regionAddresses.length) setPrompt("No addresses mapped", "Try a larger region query.");
-    else setupNextAddressRound();
-  } else if (mode === "poi") {
-    map.on("click", onMapLocationClicked);
-    if (!regionPois.length) setPrompt("No major buildings found", "Try another region query.");
-    else setupNextPoiRound();
-  }
-}
-
-function setPrompt(title, sub) {
-  document.getElementById("target-instruction").textContent = title;
-  document.getElementById("target-subtext").textContent = sub;
-  document.getElementById("mobile-target-instruction").textContent = title;
-  document.getElementById("mobile-target-subtext").textContent = sub;
-  syncNextButton(false);
-}
-
-function syncNextButton(show) {
-  document.getElementById("next-round-btn").classList.toggle("hidden-force", !show);
-  document.getElementById("mobile-next-round-btn").classList.toggle("hidden-force", !show);
-}
-
-function setupNextChallengeRound() {
-  const unanswered = regionStreets.filter(s => !s.answered);
-  if (!unanswered.length) {
-    setPrompt("🎉 All streets completed!", "Search a new region to play again.");
-    return;
-  }
-  targetQuestion = unanswered[Math.floor(Math.random() * unanswered.length)];
-  currentRound++;
-  setPrompt(`Find: "${targetQuestion.name}"`, "Click on the matching street path on the map.");
-  syncNextButton(false); updateScoreUI();
-}
-
-function onStreetClicked(street) {
-  if (currentMode === "challenge") return checkChallengeSelection(street);
-  if (currentMode !== "learn" || street.answered) return;
-
-  selectedLearnStreet = street; learnAttemptsLeft = 3;
-  document.getElementById("learn-input").value = "";
-  document.getElementById("learn-feedback").textContent = "";
-  document.getElementById("learn-attempts-left").textContent = "Tries left: 3";
-  document.getElementById("learn-modal").classList.remove("hidden");
-  document.getElementById("learn-modal").classList.add("flex");
-  setTimeout(() => document.getElementById("learn-input").focus(), 50);
-  playSound("click");
-}
-
-function closeLearnModal() {
-  document.getElementById("learn-modal").classList.add("hidden");
-  document.getElementById("learn-modal").classList.remove("flex");
-  selectedLearnStreet = null;
-}
-
-function normalizeStreetName(str) {
-  return String(str||"").toLowerCase().trim()
-    .replace(/\bstreet\b/g,"st").replace(/\bavenue\b/g,"ave").replace(/\broad\b/g,"rd")
-    .replace(/\bdrive\b/g,"dr").replace(/\bboulevard\b/g,"blvd").replace(/\blane\b/g,"ln")
-    .replace(/[^a-z0-9\s]/g,"").replace(/\s+/g," ");
-}
-
-function submitLearnGuess() {
-  if (!selectedLearnStreet) return;
-  const guess = document.getElementById("learn-input").value;
-  const actual = selectedLearnStreet.name;
-
-  if (normalizeStreetName(guess) === normalizeStreetName(actual)) {
-    playSound("success");
-    selectedLearnStreet.answered = true; selectedLearnStreet.correct = true;
-    selectedLearnStreet.layers.forEach(l => {
-      l.line.setStyle({ color:"#10b981", weight:6, opacity:1 });
-      l.line.bindTooltip(actual, { permanent:true, className:"street-label" }).openTooltip();
-    });
-    currentScore++; totalPossibleScore++; updateScoreUI(); closeLearnModal();
-  } else {
-    learnAttemptsLeft--; playSound("error");
-    if (learnAttemptsLeft > 0) {
-      document.getElementById("learn-feedback").textContent = "❌ Incorrect guess. Try again.";
-      document.getElementById("learn-feedback").className = "text-sm min-h-[24px] font-medium mt-3 text-rose-400";
-      document.getElementById("learn-attempts-left").textContent = `Tries left: ${learnAttemptsLeft}`;
-    } else {
-      selectedLearnStreet.answered = true; selectedLearnStreet.correct = false;
-      selectedLearnStreet.layers.forEach(l => {
-        l.line.setStyle({ color:"#f97316", weight:6, opacity:1 });
-        l.line.bindTooltip(`Correct: ${actual}`, { permanent:true, className:"street-label" }).openTooltip();
-      });
-      totalPossibleScore++; updateScoreUI(); closeLearnModal();
-    }
-  }
-}
-
-function checkChallengeSelection(selected) {
-  if (!targetQuestion || currentMode !== "challenge") return;
-
-  if (selected.name === targetQuestion.name) {
-    playSound("success");
-    targetQuestion.answered = true; targetQuestion.correct = true;
-    targetQuestion.layers.forEach(l => {
-      l.line.setStyle({ color:"#10b981", weight:7, opacity:1 });
-      l.line.bindTooltip(targetQuestion.name, { permanent:true, className:"street-label" }).openTooltip();
-    });
-    currentScore++; totalPossibleScore++; updateScoreUI();
-    setPrompt(`✅ Correct! ${targetQuestion.name}`, "Proceed to the next round.");
-    syncNextButton(true);
-  } else {
-    playSound("error");
-    targetQuestion.answered = true; targetQuestion.correct = false;
-    targetQuestion.layers.forEach(l => {
-      l.line.setStyle({ color:"#f97316", weight:7, opacity:1 });
-      l.line.bindTooltip(`Target: ${targetQuestion.name}`, { permanent:true, className:"street-label" }).openTooltip();
-    });
-    totalPossibleScore++; updateScoreUI();
-    setPrompt(`❌ Missed — target was "${targetQuestion.name}"`, "Highlighted in orange on the map.");
-    syncNextButton(true);
-  }
-}
-
-function setupNextAddressRound() {
-  if (!regionAddresses.length) return;
-  const item = regionAddresses[Math.floor(Math.random()*regionAddresses.length)];
-  targetQuestion = { ...item }; currentRound++; tempMarkersLayer.clearLayers();
-  setPrompt(`Find: "${item.address}"`, "Tap the location on the map where this address belongs.");
-  syncNextButton(false); updateScoreUI();
-}
-
-function setupNextPoiRound() {
-  if (!regionPois.length) return;
-  const item = regionPois[Math.floor(Math.random()*regionPois.length)];
-  targetQuestion = { ...item }; currentRound++; tempMarkersLayer.clearLayers();
-  setPrompt(`Find: "${item.name}"`, `Category: ${item.category.toUpperCase()}. Tap its location.`);
-  syncNextButton(false); updateScoreUI();
-}
-
-function onMapLocationClicked(e) {
-  if ((currentMode !== "address" && currentMode !== "poi") || !targetQuestion) return;
-
-  const guess = [e.latlng.lat, e.latlng.lng];
-  const actual = [targetQuestion.lat, targetQuestion.lon];
-  const dist = L.latLng(guess).distanceTo(L.latLng(actual));
-  const pts = Math.max(0, Math.round(5000 * Math.exp(-dist / 600)));
-
-  currentScore += pts; totalPossibleScore += 5000; updateScoreUI();
-  tempMarkersLayer.clearLayers();
-
-  L.circleMarker(guess, { radius:8, color:"#fff", weight:2, fillColor:"#ef4444", fillOpacity:1 })
-    .addTo(tempMarkersLayer).bindTooltip("Your Guess", { permanent:true, className:"street-label" }).openTooltip();
-
-  const label = targetQuestion.address || targetQuestion.name;
-  L.circleMarker(actual, { radius:9, color:"#fff", weight:2, fillColor:"#10b981", fillOpacity:1 })
-    .addTo(tempMarkersLayer).bindTooltip(label, { permanent:true, className:"street-label" }).openTooltip();
-
-  L.polyline([guess, actual], { color:"#f59e0b", weight:3, dashArray:"5 8" }).addTo(tempMarkersLayer);
-
-  if (pts > 3500) playSound("success"); else playSound("error");
-  setPrompt(`Score: ${pts.toLocaleString()} / 5,000 pts`, `Distance error: ${Math.round(dist)} meters.`);
-  syncNextButton(true);
-  targetQuestion = null;
-}
-
-function nextRound() {
-  playSound("click");
-  if (currentMode === "challenge") setupNextChallengeRound();
-  else if (currentMode === "address") setupNextAddressRound();
-  else if (currentMode === "poi") setupNextPoiRound();
-}
-
-function resetGameScoreAndState() {
-  currentScore = 0; totalPossibleScore = 0; currentRound = 0; targetQuestion = null;
-  tempMarkersLayer.clearLayers();
-  regionStreets.forEach(s => {
-    s.answered = false; s.correct = false;
-    (s.layers || []).forEach(l => {
-      l.line.setStyle({ color:"#64748b", weight:4, opacity:.82 });
-      if (l.line.getTooltip()) l.line.unbindTooltip();
-    });
-  });
-  updateScoreUI();
-}
-
-function updateScoreUI() {
-  document.getElementById("score-display").textContent = currentScore.toLocaleString();
-  document.getElementById("score-subtext").textContent = `/ ${totalPossibleScore.toLocaleString()} pts`;
-  document.getElementById("round-display").textContent = String(currentRound);
-}
-
-function showLoading(title, desc) {
-  document.getElementById("loading-title").textContent = title;
-  document.getElementById("loading-desc").textContent = desc;
-  document.getElementById("loading-overlay").classList.remove("hidden");
-  document.getElementById("loading-overlay").classList.add("flex");
-}
-
-function hideLoading() {
-  document.getElementById("loading-overlay").classList.add("hidden");
-  document.getElementById("loading-overlay").classList.remove("flex");
-}
-</script>
-</body>
-</html>
+  const quer
